@@ -1,0 +1,12 @@
+# Optional: run against SQL Server instead of the default SQLite file.
+#   docker compose up -d
+#   dotnet run --project src/ParentPortal.Api -- --Database:Provider=SqlServer \
+#     "--ConnectionStrings:ParentPortal=Server=localhost,1433;Database=ParentPortal;User Id=sa;Password=Your_strong_password123;TrustServerCertificate=True"
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Your_strong_password123"
+    ports:
+      - "1433:1433"
