@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Use cases. Depends only on Domain and Contracts; infrastructure is reached through interfaces. -->
+  <ItemGroup>
+    <ProjectReference Include="..\ParentPortal.Domain\ParentPortal.Domain.csproj" />
+    <ProjectReference Include="..\ParentPortal.Contracts\ParentPortal.Contracts.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,101 @@
+@page "/announcements/new"
+@inject ApiClient Api
+@inject DemoSession Session
+@inject NavigationManager Nav
+
+<PageTitle>New announcement</PageTitle>
+
+<h1>New announcement</h1>
+
+@if (!Session.CanAuthor)
+{
+    <div class="alert alert-secondary">Only teachers and school admins can create announcements.</div>
+}
+else
+{
+    <EditForm Model="_model" OnValidSubmit="SubmitAsync" FormName="new-announcement" class="col-lg-8">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger" />
+
+        <div class="mb-3">
+            <label class="form-label" for="title">Title</label>
+            <InputText id="title" class="form-control" @bind-Value="_model.Title" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="body">Message</label>
+            <InputTextArea id="body" class="form-control" rows="6" @bind-Value="_model.Body" />
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label" for="audience">Audience</label>
+                <InputSelect id="audience" class="form-select" @bind-Value="_model.ClassroomId">
+                    <option value="">Whole school</option>
+                    @foreach (var c in _classrooms)
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label" for="priority">Priority</label>
+                <InputSelect id="priority" class="form-select" @bind-Value="_model.Priority">
+                    @foreach (var p in Priorities.All)
+                    {
+                        <option value="@p">@p</option>
+                    }
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="form-check mb-3">
+            <InputCheckbox id="publish" class="form-check-input" @bind-Value="_model.PublishNow" />
+            <label class="form-check-label" for="publish">Publish immediately (notifies parents in real time)</label>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger">@_error</div>
+        }
+
+        <button type="submit" class="btn btn-primary" disabled="@_saving">
+            @(_saving ? "Saving..." : _model.PublishNow ? "Publish" : "Save draft")
+        </button>
+    </EditForm>
+}
+
+@code {
+    private readonly CreateAnnouncementRequest _model = new();
+    private IReadOnlyList<ClassroomDto> _classrooms = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureLoadedAsync();
+        if (Session.CanAuthor)
+        {
+            _classrooms = await Api.GetClassroomsAsync();
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.CreateAnnouncementAsync(_model);
+            Nav.NavigateTo("announcements");
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

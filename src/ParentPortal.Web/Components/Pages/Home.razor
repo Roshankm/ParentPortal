@@ -1,0 +1,80 @@
+@page "/"
+@inject ApiClient Api
+@inject DemoSession Session
+@inject NavigationManager Nav
+
+<PageTitle>ParentPortal</PageTitle>
+
+<h1>ParentPortal</h1>
+<p class="lead">
+    A multi-tenant school&ndash;parent communication platform built with .NET 10, Blazor and ASP.NET Core.
+</p>
+
+<h2 class="h5 mt-4">Choose a demo user</h2>
+<p class="text-muted">
+    Each school is a separate tenant. Sign in as users from both schools to see that data never crosses over,
+    and open two browser windows to watch announcements arrive in real time.
+</p>
+
+@if (_error is not null)
+{
+    <div class="alert alert-warning">
+        @_error <br />
+        <small>Is the API running? <code>dotnet run --project src/ParentPortal.Api</code></small>
+    </div>
+}
+else if (_users is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    @foreach (var school in _users.GroupBy(u => u.SchoolName))
+    {
+        <h3 class="h6 mt-3"><i class="bi bi-building"></i> @school.Key</h3>
+        <div class="row g-3">
+            @foreach (var user in school)
+            {
+                <div class="col-sm-6 col-lg-4">
+                    <button class="card w-100 text-start demo-user @(Session.CurrentUser?.Id == user.Id ? "border-primary" : "")"
+                            @onclick="() => SignIn(user)">
+                        <div class="card-body">
+                            <div class="fw-semibold">@user.Name</div>
+                            <span class="badge @RoleBadge(user.Role)">@user.Role</span>
+                        </div>
+                    </button>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private IReadOnlyList<DemoUserDto>? _users;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _users = await Api.GetDemoUsersAsync() ?? [];
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = $"Could not load demo users: {ex.Message}";
+        }
+    }
+
+    private async Task SignIn(DemoUserDto user)
+    {
+        await Session.SignInAsync(user);
+        Nav.NavigateTo("announcements");
+    }
+
+    private static string RoleBadge(string role) => role switch
+    {
+        "SchoolAdmin" => "text-bg-danger",
+        "Teacher" => "text-bg-primary",
+        _ => "text-bg-success",
+    };
+}

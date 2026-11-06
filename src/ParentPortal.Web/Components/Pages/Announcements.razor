@@ -1,0 +1,211 @@
+@page "/announcements"
+@implements IDisposable
+@inject ApiClient Api
+@inject DemoSession Session
+@inject NotificationClient Notifications
+
+<PageTitle>Announcements</PageTitle>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+    <h1 class="me-auto mb-0">Announcements</h1>
+    @if (_classrooms.Count > 0)
+    {
+        <select class="form-select w-auto" @bind="ClassroomFilter" @bind:after="FilterChangedAsync" aria-label="Filter by class">
+            <option value="">All classes</option>
+            @foreach (var c in _classrooms)
+            {
+                <option value="@c.Id">@c.Name</option>
+            }
+        </select>
+    }
+    @if (Session.CanAuthor)
+    {
+        <a class="btn btn-primary" href="announcements/new"><i class="bi bi-plus-lg"></i> New</a>
+    }
+</div>
+
+@if (_toast is not null)
+{
+    <div class="alert alert-info alert-dismissible" role="status">
+        <i class="bi bi-bell-fill"></i> New announcement: <strong>@_toast</strong>
+        <button type="button" class="btn-close" aria-label="Close" @onclick="() => _toast = null"></button>
+    </div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (!Session.IsSignedIn)
+{
+    <p>Please <a href="">choose a demo user</a> first.</p>
+}
+else if (_page is null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (_page.Items.Count == 0)
+{
+    <p class="text-muted">No announcements yet.</p>
+}
+else
+{
+    @foreach (var a in _page.Items)
+    {
+        <div class="card mb-3 @(a.Priority == Priorities.Urgent ? "border-danger" : "")">
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+                    <h2 class="h5 mb-0 me-auto">@a.Title</h2>
+                    <span class="badge @PriorityBadge(a.Priority)">@a.Priority</span>
+                    @if (a.Status != "Published")
+                    {
+                        <span class="badge text-bg-secondary">@a.Status</span>
+                    }
+                </div>
+                <div class="small text-muted mb-2">
+                    @(a.ClassroomName ?? "Whole school") &middot;
+                    @((a.PublishedAtUtc ?? a.CreatedAtUtc).ToLocalTime().ToString("dd MMM yyyy, HH:mm"))
+                </div>
+                <p class="mb-2" style="white-space: pre-line">@a.Body</p>
+
+                <div class="d-flex gap-2 align-items-center">
+                    @if (Session.IsParent)
+                    {
+                        if (a.AcknowledgedByMe)
+                        {
+                            <span class="text-success small"><i class="bi bi-check-circle-fill"></i> Acknowledged</span>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-success" @onclick="() => AcknowledgeAsync(a.Id)">
+                                <i class="bi bi-check2"></i> Mark as read
+                            </button>
+                        }
+                    }
+                    else
+                    {
+                        <span class="small text-muted"><i class="bi bi-eye"></i> @a.AcknowledgementCount acknowledged</span>
+                        @if (a.Status == "Draft")
+                        {
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => PublishAsync(a.Id)">Publish</button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_page.TotalPages > 1)
+    {
+        <nav aria-label="Announcement pages">
+            <ul class="pagination">
+                @for (var p = 1; p <= _page.TotalPages; p++)
+                {
+                    var pageNumber = p;
+                    <li class="page-item @(pageNumber == _page.Page ? "active" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(pageNumber)">@pageNumber</button>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    private PagedResult<AnnouncementDto>? _page;
+    private IReadOnlyList<ClassroomDto> _classrooms = [];
+    private int _currentPage = 1;
+    private string? _error;
+    private string? _toast;
+
+    private string ClassroomFilter { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureLoadedAsync();
+        Session.Changed += OnSessionChanged;
+        Notifications.AnnouncementPublished += OnAnnouncementPublished;
+        await LoadAllAsync();
+    }
+
+    private void OnSessionChanged() => InvokeAsync(LoadAllAsync);
+
+    private async Task LoadAllAsync()
+    {
+        if (!Session.IsSignedIn)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        await Notifications.ConnectAsync();
+        await Run(async () => _classrooms = await Api.GetClassroomsAsync());
+        await ReloadAsync();
+    }
+
+    private async Task FilterChangedAsync()
+    {
+        _currentPage = 1;
+        await ReloadAsync();
+    }
+
+    private Task ReloadAsync() => Run(async () =>
+    {
+        Guid? classroomId = Guid.TryParse(ClassroomFilter, out var id) ? id : null;
+        _page = await Api.GetAnnouncementsAsync(classroomId, _currentPage);
+    });
+
+    private async Task GoToPage(int page)
+    {
+        _currentPage = page;
+        await ReloadAsync();
+    }
+
+    private Task AcknowledgeAsync(Guid id) => Run(async () =>
+    {
+        await Api.AcknowledgeAsync(id);
+        await ReloadAsync();
+    });
+
+    private Task PublishAsync(Guid id) => Run(async () =>
+    {
+        await Api.PublishAsync(id);
+        await ReloadAsync();
+    });
+
+    private Task OnAnnouncementPublished(AnnouncementDto dto) => InvokeAsync(async () =>
+    {
+        _toast = dto.Title;
+        await ReloadAsync();
+        StateHasChanged();
+    });
+
+    private async Task Run(Func<Task> action)
+    {
+        try
+        {
+            _error = null;
+            await action();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+
+        StateHasChanged();
+    }
+
+    private static string PriorityBadge(string priority) => priority switch
+    {
+        Priorities.Urgent => "text-bg-danger",
+        Priorities.High => "text-bg-warning",
+        _ => "text-bg-light border",
+    };
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        Notifications.AnnouncementPublished -= OnAnnouncementPublished;
+    }
+}

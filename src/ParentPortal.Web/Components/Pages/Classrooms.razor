@@ -1,0 +1,81 @@
+@page "/classrooms"
+@inject ApiClient Api
+@inject DemoSession Session
+
+<PageTitle>Classrooms</PageTitle>
+
+<h1>Classrooms</h1>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<table class="table table-sm col-lg-6 w-auto">
+    <thead><tr><th>Class</th><th>Grade</th></tr></thead>
+    <tbody>
+        @foreach (var c in _classrooms)
+        {
+            <tr><td>@c.Name</td><td>@c.Grade</td></tr>
+        }
+    </tbody>
+</table>
+
+@if (Session.IsAdmin)
+{
+    <h2 class="h5 mt-4">Add a classroom</h2>
+    <EditForm Model="_model" OnValidSubmit="AddAsync" FormName="new-classroom" class="row g-2 align-items-end">
+        <DataAnnotationsValidator />
+        <div class="col-auto">
+            <label class="form-label" for="name">Name</label>
+            <InputText id="name" class="form-control" @bind-Value="_model.Name" placeholder="Grade 5 - C" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label" for="grade">Grade</label>
+            <InputNumber id="grade" class="form-control" @bind-Value="_model.Grade" />
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+        <ValidationSummary class="text-danger" />
+    </EditForm>
+}
+
+@code {
+    private IReadOnlyList<ClassroomDto> _classrooms = [];
+    private CreateClassroomRequest _model = new();
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureLoadedAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _classrooms = Session.IsSignedIn ? await Api.GetClassroomsAsync() : [];
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        try
+        {
+            _error = null;
+            await Api.CreateClassroomAsync(_model);
+            _model = new();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

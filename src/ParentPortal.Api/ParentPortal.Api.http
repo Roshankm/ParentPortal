@@ -1,0 +1,21 @@
+@api = http://localhost:5180
+
+### List announcements as a parent
+GET {{api}}/api/announcements
+X-Demo-User: parent.greenfield.1
+
+### Create an announcement as a teacher
+POST {{api}}/api/announcements
+X-Demo-User: teacher.greenfield
+Content-Type: application/json
+
+{
+  "title": "Library books due Friday",
+  "body": "Please return all borrowed library books by Friday.",
+  "priority": "Normal",
+  "publishNow": true
+}
+
+### Tenant isolation: Oakridge teacher cannot see Greenfield data
+GET {{api}}/api/announcements
+X-Demo-User: teacher.oakridge
